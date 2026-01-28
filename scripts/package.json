@@ -1,0 +1,12 @@
+{
+  "name": "eu-spending-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "fetch-sample": "tsx fetch-ted-sample.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
