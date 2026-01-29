@@ -1,4 +1,7 @@
 import { cityData, getCountryName } from './countryCoordinates.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 export interface Contract {
   id: string;
@@ -712,4 +715,26 @@ function generateContracts(): Contract[] {
   return contracts;
 }
 
-export const mockContracts: Contract[] = generateContracts();
+// Try to load real TED data if available, otherwise use generated mock data
+function loadContracts(): Contract[] {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const tedDataPath = path.join(__dirname, 'tedContracts.json');
+
+    if (fs.existsSync(tedDataPath)) {
+      const tedData = JSON.parse(fs.readFileSync(tedDataPath, 'utf-8'));
+      if (Array.isArray(tedData) && tedData.length > 0) {
+        console.log(`✓ Loaded ${tedData.length} real contracts from TED data`);
+        return tedData as Contract[];
+      }
+    }
+  } catch (error) {
+    console.log('Could not load TED data, using demo contracts:', error instanceof Error ? error.message : error);
+  }
+
+  console.log('Using generated demo contract data');
+  return generateContracts();
+}
+
+export const mockContracts: Contract[] = loadContracts();

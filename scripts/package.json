@@ -3,10 +3,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "fetch-sample": "tsx fetch-ted-sample.ts"
+    "fetch-ted": "tsx fetch-ted-data.ts",
+    "fetch-csv": "tsx fetch-ted-csv.ts"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.0"
   },
   "devDependencies": {
     "tsx": "^4.7.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
   }
 }
