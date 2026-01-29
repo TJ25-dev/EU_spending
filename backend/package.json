@@ -1,6 +1,7 @@
 {
   "name": "eu-spending-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Backend API server for EU procurement data visualization",
   "main": "dist/index.js",
   "scripts": {

@@ -54,10 +54,24 @@ export async function fetchContractById(id: string): Promise<Contract> {
 }
 
 /**
+ * Filter options for dashboard stats
+ */
+export interface DashboardFilters {
+  country?: string;
+  year?: string;
+  category?: string;
+}
+
+/**
  * Fetch overall summary statistics
  */
-export async function fetchSummaryStats(): Promise<SummaryStats> {
-  const response = await apiClient.get('/stats/summary');
+export async function fetchSummaryStats(filters?: DashboardFilters): Promise<SummaryStats> {
+  const params: Record<string, string> = {};
+  if (filters?.country) params.country = filters.country;
+  if (filters?.year) params.year = filters.year;
+  if (filters?.category) params.category = filters.category;
+
+  const response = await apiClient.get('/stats/summary', { params });
   const d = response.data.data;
   return {
     totalContracts: d.totalContracts,
@@ -66,6 +80,8 @@ export async function fetchSummaryStats(): Promise<SummaryStats> {
     totalCountries: d.countriesCovered,
     totalContractors: 0,
     totalCategories: 0,
+    countryList: d.countryList,
+    availableYears: d.availableYears,
     dateRange: d.dateRange ? { earliest: d.dateRange.from, latest: d.dateRange.to } : undefined,
     monthlyTrend: d.monthlyTrend,
   };
@@ -74,8 +90,12 @@ export async function fetchSummaryStats(): Promise<SummaryStats> {
 /**
  * Fetch statistics aggregated by country
  */
-export async function fetchCountryStats(): Promise<CountryStats[]> {
-  const response = await apiClient.get('/stats/by-country');
+export async function fetchCountryStats(filters?: DashboardFilters): Promise<CountryStats[]> {
+  const params: Record<string, string> = {};
+  if (filters?.year) params.year = filters.year;
+  if (filters?.category) params.category = filters.category;
+
+  const response = await apiClient.get('/stats/by-country', { params });
   return (response.data.data || []).map((d: Record<string, unknown>) => ({
     countryCode: d.countryCode,
     countryName: d.country,
@@ -88,8 +108,12 @@ export async function fetchCountryStats(): Promise<CountryStats[]> {
 /**
  * Fetch statistics aggregated by category
  */
-export async function fetchCategoryStats(): Promise<CategoryStats[]> {
-  const response = await apiClient.get('/stats/by-category');
+export async function fetchCategoryStats(filters?: DashboardFilters): Promise<CategoryStats[]> {
+  const params: Record<string, string> = {};
+  if (filters?.country) params.country = filters.country;
+  if (filters?.year) params.year = filters.year;
+
+  const response = await apiClient.get('/stats/by-category', { params });
   return (response.data.data || []).map((d: Record<string, unknown>) => ({
     category: d.cpvDescription,
     totalAmount: d.totalAmount,

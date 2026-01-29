@@ -1,40 +1,73 @@
 import { Router, Request, Response } from 'express';
-import { mockContracts } from '../data/mockContracts.js';
+import { mockContracts, Contract } from '../data/mockContracts.js';
 import { getCountryName } from '../data/countryCoordinates.js';
 
 const router = Router();
 
+// Helper function to filter contracts based on query params
+function filterContracts(
+  contracts: Contract[],
+  filters: { country?: string; year?: string; category?: string }
+): Contract[] {
+  let filtered = contracts;
+
+  const countryFilter = filters.country;
+  if (countryFilter) {
+    filtered = filtered.filter(c => c.countryCode === countryFilter.toUpperCase());
+  }
+
+  const yearFilter = filters.year;
+  if (yearFilter) {
+    filtered = filtered.filter(c => c.publishDate.startsWith(yearFilter));
+  }
+
+  const categoryFilter = filters.category;
+  if (categoryFilter) {
+    filtered = filtered.filter(c =>
+      c.cpvCode.startsWith(categoryFilter) ||
+      c.cpvDescription.toLowerCase().includes(categoryFilter.toLowerCase())
+    );
+  }
+
+  return filtered;
+}
+
 /**
  * GET /api/stats/summary
  * Overall summary statistics
+ * Query params: country, year, category
  */
-router.get('/summary', (_req: Request, res: Response) => {
+router.get('/summary', (req: Request<{}, {}, {}, { country?: string; year?: string; category?: string }>, res: Response) => {
   try {
-    const totalContracts = mockContracts.length;
-    const totalSpending = mockContracts.reduce((sum, c) => sum + c.amount, 0);
-    const countries = new Set(mockContracts.map(c => c.countryCode));
-    const dates = mockContracts.map(c => c.publishDate).sort();
-    const averageAmount = totalSpending / totalContracts;
+    const contracts = filterContracts(mockContracts, req.query);
+    const totalContracts = contracts.length;
+    const totalSpending = contracts.reduce((sum, c) => sum + c.amount, 0);
+    const countries = new Set(contracts.map(c => c.countryCode));
+    const dates = contracts.map(c => c.publishDate).filter(Boolean).sort();
+    const averageAmount = totalContracts > 0 ? totalSpending / totalContracts : 0;
+
+    // Get available years from all contracts (for filter dropdown)
+    const allYears = [...new Set(mockContracts.map(c => c.publishDate?.substring(0, 4)).filter(Boolean))].sort();
 
     // Amount distribution
     const amountRanges = {
-      under100k: mockContracts.filter(c => c.amount < 100000).length,
-      '100kTo500k': mockContracts.filter(c => c.amount >= 100000 && c.amount < 500000).length,
-      '500kTo1m': mockContracts.filter(c => c.amount >= 500000 && c.amount < 1000000).length,
-      '1mTo5m': mockContracts.filter(c => c.amount >= 1000000 && c.amount < 5000000).length,
-      '5mTo15m': mockContracts.filter(c => c.amount >= 5000000 && c.amount < 15000000).length,
-      over15m: mockContracts.filter(c => c.amount >= 15000000).length,
+      under100k: contracts.filter(c => c.amount < 100000).length,
+      '100kTo500k': contracts.filter(c => c.amount >= 100000 && c.amount < 500000).length,
+      '500kTo1m': contracts.filter(c => c.amount >= 500000 && c.amount < 1000000).length,
+      '1mTo5m': contracts.filter(c => c.amount >= 1000000 && c.amount < 5000000).length,
+      '5mTo15m': contracts.filter(c => c.amount >= 5000000 && c.amount < 15000000).length,
+      over15m: contracts.filter(c => c.amount >= 15000000).length,
     };
 
     // Procedure type breakdown
     const procedureTypes: Record<string, number> = {};
-    for (const c of mockContracts) {
+    for (const c of contracts) {
       procedureTypes[c.procedureType] = (procedureTypes[c.procedureType] || 0) + 1;
     }
 
     // Monthly spending trend
     const monthlySpending: Record<string, { month: string; total: number; count: number }> = {};
-    for (const c of mockContracts) {
+    for (const c of contracts) {
       const month = c.publishDate.substring(0, 7); // YYYY-MM
       if (!monthlySpending[month]) {
         monthlySpending[month] = { month, total: 0, count: 0 };
@@ -53,9 +86,10 @@ router.get('/summary', (_req: Request, res: Response) => {
         averageAmount: Math.round(averageAmount * 100) / 100,
         countriesCovered: countries.size,
         countryList: Array.from(countries).sort(),
+        availableYears: allYears,
         dateRange: {
-          from: dates[0],
-          to: dates[dates.length - 1],
+          from: dates[0] || '',
+          to: dates[dates.length - 1] || '',
         },
         amountDistribution: amountRanges,
         procedureTypes,
@@ -71,9 +105,11 @@ router.get('/summary', (_req: Request, res: Response) => {
 /**
  * GET /api/stats/by-country
  * Aggregated spending by country
+ * Query params: year, category
  */
-router.get('/by-country', (_req: Request, res: Response) => {
+router.get('/by-country', (req: Request<{}, {}, {}, { year?: string; category?: string }>, res: Response) => {
   try {
+    const contracts = filterContracts(mockContracts, req.query);
     const countryMap = new Map<
       string,
       {
@@ -87,7 +123,7 @@ router.get('/by-country', (_req: Request, res: Response) => {
       }
     >();
 
-    for (const contract of mockContracts) {
+    for (const contract of contracts) {
       const existing = countryMap.get(contract.countryCode);
       if (existing) {
         existing.totalAmount += contract.amount;
@@ -131,9 +167,11 @@ router.get('/by-country', (_req: Request, res: Response) => {
 /**
  * GET /api/stats/by-category
  * Spending by CPV category
+ * Query params: country, year
  */
-router.get('/by-category', (_req: Request, res: Response) => {
+router.get('/by-category', (req: Request<{}, {}, {}, { country?: string; year?: string }>, res: Response) => {
   try {
+    const contracts = filterContracts(mockContracts, req.query);
     const categoryMap = new Map<
       string,
       {
@@ -145,7 +183,7 @@ router.get('/by-category', (_req: Request, res: Response) => {
       }
     >();
 
-    for (const contract of mockContracts) {
+    for (const contract of contracts) {
       // Group by top-level CPV category (first 2 digits)
       const topLevelCode = contract.cpvCode.substring(0, 2) + '000000';
       const existing = categoryMap.get(topLevelCode);

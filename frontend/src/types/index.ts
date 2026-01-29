@@ -61,6 +61,8 @@ export interface SummaryStats {
   totalCountries: number;
   totalContractors: number;
   totalCategories: number;
+  countryList?: string[];
+  availableYears?: string[];
   dateRange?: {
     earliest: string;
     latest: string;
