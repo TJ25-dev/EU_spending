@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import 'leaflet/dist/leaflet.css';
 import {
   MapContainer,
@@ -9,6 +9,9 @@ import {
 } from 'react-leaflet';
 import type { CountryMapData, MapFeature } from '../../types';
 import MapLegend from './MapLegend';
+
+// Generate a unique key for each map instance to prevent "already initialized" error
+let mapInstanceId = 0;
 
 interface EuropeMapProps {
   countryData: CountryMapData[];
@@ -106,6 +109,14 @@ const EuropeMap: React.FC<EuropeMapProps> = ({
   onCountryClick,
   selectedCountry,
 }) => {
+  // Use a unique key to prevent "Map container is already initialized" error
+  const [mapKey] = useState(() => `map-${++mapInstanceId}`);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   // Pre-compute ranges for sizing / colouring
   const { minCount, maxCount, minAmount, maxAmount } = useMemo(() => {
     if (countryData.length === 0) {
@@ -124,9 +135,19 @@ const EuropeMap: React.FC<EuropeMapProps> = ({
   const COLOR_LOW = '#93c5fd';
   const COLOR_HIGH = '#1e3a5f';
 
+  // Don't render map until client-side to avoid hydration issues
+  if (!isClient) {
+    return (
+      <div className="relative w-full min-h-[500px] h-full rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-100 flex items-center justify-center">
+        <p className="text-gray-500">Loading map...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full min-h-[500px] h-full rounded-lg overflow-hidden border border-gray-200 shadow-sm">
       <MapContainer
+        key={mapKey}
         center={[50, 10]}
         zoom={4}
         scrollWheelZoom={true}
