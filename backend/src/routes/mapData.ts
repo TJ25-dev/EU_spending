@@ -151,4 +151,90 @@ router.get('/countries', (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/map-data/cities/:countryCode
+ * Return summary per city for a specific country
+ */
+router.get('/cities/:countryCode', (req: Request<{ countryCode: string }>, res: Response) => {
+  try {
+    const countryCode = req.params.countryCode.toUpperCase();
+
+    const cityMap = new Map<
+      string,
+      {
+        city: string;
+        region: string;
+        countryCode: string;
+        country: string;
+        totalAmount: number;
+        contractCount: number;
+        lat: number;
+        lng: number;
+        contracts: Array<{
+          id: string;
+          title: string;
+          amount: number;
+          buyerName: string;
+          contractorName: string;
+        }>;
+      }
+    >();
+
+    const countryContracts = mockContracts.filter(
+      c => c.countryCode.toUpperCase() === countryCode
+    );
+
+    for (const contract of countryContracts) {
+      const cityKey = `${contract.city}-${contract.region}`;
+      const existing = cityMap.get(cityKey);
+
+      const contractSummary = {
+        id: contract.id,
+        title: contract.title,
+        amount: contract.amount,
+        buyerName: contract.buyerName,
+        contractorName: contract.contractorName,
+      };
+
+      if (existing) {
+        existing.totalAmount += contract.amount;
+        existing.contractCount += 1;
+        existing.contracts.push(contractSummary);
+      } else {
+        cityMap.set(cityKey, {
+          city: contract.city,
+          region: contract.region,
+          countryCode: contract.countryCode,
+          country: contract.country,
+          totalAmount: contract.amount,
+          contractCount: 1,
+          lat: contract.lat,
+          lng: contract.lng,
+          contracts: [contractSummary],
+        });
+      }
+    }
+
+    const citySummary = Array.from(cityMap.values())
+      .map(entry => ({
+        city: entry.city,
+        region: entry.region,
+        countryCode: entry.countryCode,
+        country: entry.country,
+        totalAmount: Math.round(entry.totalAmount * 100) / 100,
+        contractCount: entry.contractCount,
+        averageAmount: Math.round((entry.totalAmount / entry.contractCount) * 100) / 100,
+        lat: entry.lat,
+        lng: entry.lng,
+        contracts: entry.contracts,
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount);
+
+    res.json({ data: citySummary });
+  } catch (error) {
+    console.error('Error generating city map data:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

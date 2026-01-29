@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Globe, FileText, TrendingUp } from 'lucide-react';
+import { BarChart3, Globe, FileText, TrendingUp, ArrowLeft } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -8,7 +8,7 @@ import {
 import StatCard from '../components/StatCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EuropeMap from '../components/Map/EuropeMap';
-import { fetchSummaryStats, fetchCountryStats, fetchCategoryStats, fetchCountryMapData, fetchContracts } from '../api/contracts';
+import { fetchSummaryStats, fetchCountryStats, fetchCategoryStats, fetchCountryMapData, fetchContracts, fetchCityMapData, CityMapData } from '../api/contracts';
 import { formatCompactCurrency, formatCurrency, formatNumber, formatDate } from '../utils/format';
 import type { SummaryStats, CountryStats, CategoryStats, CountryMapData, Contract } from '../types';
 
@@ -28,6 +28,8 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | undefined>();
+  const [cityData, setCityData] = useState<CityMapData[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -53,6 +55,42 @@ const Dashboard: React.FC = () => {
     }
     loadData();
   }, []);
+
+  // Fetch city data when a country is selected
+  useEffect(() => {
+    if (!selectedCountry) {
+      setCityData([]);
+      return;
+    }
+    async function loadCityData() {
+      try {
+        setLoadingCities(true);
+        const cities = await fetchCityMapData(selectedCountry!);
+        setCityData(cities);
+      } catch (err) {
+        console.error('Failed to load city data:', err);
+        setCityData([]);
+      } finally {
+        setLoadingCities(false);
+      }
+    }
+    loadCityData();
+  }, [selectedCountry]);
+
+  const handleCountryClick = (code: string) => {
+    if (code === selectedCountry) {
+      // Clicking same country again deselects
+      setSelectedCountry(undefined);
+    } else {
+      setSelectedCountry(code);
+    }
+  };
+
+  const handleBackToEurope = () => {
+    setSelectedCountry(undefined);
+  };
+
+  const selectedCountryName = countryMapData.find(c => c.countryCode === selectedCountry)?.countryName;
 
   if (loading) return <LoadingSpinner message="Loading procurement data..." size="lg" />;
   if (error) return (
@@ -110,12 +148,42 @@ const Dashboard: React.FC = () => {
         {/* Map - takes 2/3 width on large screens */}
         <div className="lg:col-span-2">
           <div className="card">
-            <h2 className="card-header">Procurement Spending Across Europe</h2>
-            <EuropeMap
-              countryData={countryMapData}
-              onCountryClick={(code) => setSelectedCountry(code === selectedCountry ? undefined : code)}
-              selectedCountry={selectedCountry}
-            />
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                {selectedCountry && (
+                  <button
+                    onClick={handleBackToEurope}
+                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-eu-blue transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    Back
+                  </button>
+                )}
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {selectedCountry
+                    ? `Cities in ${selectedCountryName}`
+                    : 'Procurement Spending Across Europe'}
+                </h2>
+              </div>
+              {selectedCountry && (
+                <span className="text-xs text-gray-500">
+                  Click a city to see contracts
+                </span>
+              )}
+            </div>
+            {loadingCities ? (
+              <div className="h-[500px] flex items-center justify-center">
+                <LoadingSpinner message={`Loading cities in ${selectedCountryName}...`} />
+              </div>
+            ) : (
+              <EuropeMap
+                countryData={countryMapData}
+                cityData={selectedCountry ? cityData : undefined}
+                onCountryClick={handleCountryClick}
+                onCityClick={(cityName) => navigate(`/contracts?country=${selectedCountry}&search=${encodeURIComponent(cityName)}`)}
+                selectedCountry={selectedCountry}
+              />
+            )}
           </div>
         </div>
 

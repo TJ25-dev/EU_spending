@@ -143,3 +143,33 @@ export async function fetchCountryMapData(): Promise<CountryMapData[]> {
     center: [d.lat, d.lng] as [number, number],
   }));
 }
+
+/**
+ * City-level map data type
+ */
+export interface CityMapData {
+  city: string;
+  region: string;
+  countryCode: string;
+  country: string;
+  totalAmount: number;
+  contractCount: number;
+  averageAmount: number;
+  lat: number;
+  lng: number;
+  contracts: Array<{
+    id: string;
+    title: string;
+    amount: number;
+    buyerName: string;
+    contractorName: string;
+  }>;
+}
+
+/**
+ * Fetch city-level map data for a specific country
+ */
+export async function fetchCityMapData(countryCode: string): Promise<CityMapData[]> {
+  const response = await apiClient.get(`/map-data/cities/${countryCode}`);
+  return response.data.data || [];
+}

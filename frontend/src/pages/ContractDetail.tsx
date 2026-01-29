@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, Building2, Calendar, Tag, FileText, Briefcase } from 'lucide-react';
+import { ArrowLeft, MapPin, Building2, Calendar, Tag, FileText, Briefcase, ExternalLink } from 'lucide-react';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -126,11 +126,26 @@ const ContractDetail: React.FC = () => {
 
       {/* Contract value highlight */}
       <div className="card bg-gradient-to-r from-eu-blue to-eu-dark-blue text-white !border-0">
-        <p className="text-sm text-blue-200">Contract Value</p>
-        <p className="text-3xl font-bold mt-1">{formatCurrency(contract.amount)}</p>
-        <p className="text-sm text-blue-200 mt-2">
-          {contract.country} &middot; {contract.cpvDescription || 'Public Procurement'}
-        </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <p className="text-sm text-blue-200">Contract Value</p>
+            <p className="text-3xl font-bold mt-1">{formatCurrency(contract.amount)}</p>
+            <p className="text-sm text-blue-200 mt-2">
+              {contract.country} &middot; {contract.cpvDescription || 'Public Procurement'}
+            </p>
+          </div>
+          {contract.tedNoticeId && (
+            <a
+              href={`https://ted.europa.eu/en/notice/-/${contract.tedNoticeId.replace('/', '-')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              View on TED
+            </a>
+          )}
+        </div>
       </div>
 
       {/* Main content grid */}
