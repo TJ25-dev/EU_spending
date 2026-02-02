@@ -1,5 +1,8 @@
 {
-  "dependencies": {
-    "twitter-api-v2": "^1.29.0"
+  "name": "eu-spending",
+  "private": true,
+  "scripts": {
+    "build": "cd backend && npm ci && npm run build",
+    "start": "cd backend && node dist/index.js"
   }
 }
