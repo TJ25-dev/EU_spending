@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Globe, FileText, TrendingUp, ArrowLeft, ChevronDown, ChevronUp, Filter, X } from 'lucide-react';
+import { BarChart3, Globe, FileText, TrendingUp } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -8,18 +8,33 @@ import {
 import StatCard from '../components/StatCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EuropeMap from '../components/Map/EuropeMap';
-import { fetchSummaryStats, fetchCountryStats, fetchCategoryStats, fetchCountryMapData, fetchContracts, fetchCityMapData, CityMapData, DashboardFilters } from '../api/contracts';
-import { formatCompactCurrency, formatCurrency, formatNumber, formatDate } from '../utils/format';
-import type { SummaryStats, CountryStats, CategoryStats, CountryMapData, Contract } from '../types';
+import { fetchSummaryStats, fetchCountryStats, fetchCategoryStats, fetchCountryMapData, fetchContracts } from '../api/contracts';
+import { formatCompactCurrency, formatNumber, formatDate } from '../utils/format';
+import type { SummaryStats, CountryStats, CategoryStats, CountryMapData, Contract, MapFeature } from '../types';
 
-// Country names for the filter dropdown
-const COUNTRY_NAMES: Record<string, string> = {
-  'DE': 'Germany', 'FR': 'France', 'IT': 'Italy', 'ES': 'Spain', 'NL': 'Netherlands',
-  'BE': 'Belgium', 'PL': 'Poland', 'SE': 'Sweden', 'AT': 'Austria', 'PT': 'Portugal',
-  'GR': 'Greece', 'IE': 'Ireland', 'CZ': 'Czech Republic', 'RO': 'Romania', 'DK': 'Denmark',
-  'FI': 'Finland', 'HU': 'Hungary', 'HR': 'Croatia', 'BG': 'Bulgaria', 'SK': 'Slovakia',
-  'LT': 'Lithuania', 'LV': 'Latvia', 'EE': 'Estonia', 'SI': 'Slovenia', 'LU': 'Luxembourg',
-};
+/**
+ * Convert a contract to a MapFeature for map display
+ */
+function contractToMapFeature(contract: Contract): MapFeature {
+  return {
+    type: 'Feature',
+    geometry: {
+      type: 'Point',
+      coordinates: [contract.lng, contract.lat], // GeoJSON is [lng, lat]
+    },
+    properties: {
+      id: contract.id,
+      title: contract.title,
+      amount: contract.amount,
+      currency: contract.currency,
+      country: contract.countryCode,
+      countryName: contract.country,
+      category: contract.cpvDescription,
+      contractorName: contract.contractorName,
+      awardDate: contract.publishDate,
+    },
+  };
+}
 
 const CHART_COLORS = [
   '#003399', '#1e56a0', '#3b82f6', '#60a5fa', '#93c5fd',
@@ -34,85 +49,42 @@ const Dashboard: React.FC = () => {
   const [categoryStats, setCategoryStats] = useState<CategoryStats[]>([]);
   const [countryMapData, setCountryMapData] = useState<CountryMapData[]>([]);
   const [recentContracts, setRecentContracts] = useState<Contract[]>([]);
+  const [mapFeatures, setMapFeatures] = useState<MapFeature[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | undefined>();
-  const [cityData, setCityData] = useState<CityMapData[]>([]);
-  const [loadingCities, setLoadingCities] = useState(false);
-
-  // Filter state
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<DashboardFilters>({});
-  const [availableCountries, setAvailableCountries] = useState<string[]>([]);
-  const [availableYears, setAvailableYears] = useState<string[]>([]);
-
-  const loadData = useCallback(async (currentFilters: DashboardFilters) => {
-    try {
-      setLoading(true);
-      const [summaryData, countries, categories, mapData, contractsRes] = await Promise.all([
-        fetchSummaryStats(currentFilters),
-        fetchCountryStats(currentFilters),
-        fetchCategoryStats(currentFilters),
-        fetchCountryMapData(),
-        fetchContracts(currentFilters.country ? { country: currentFilters.country } : undefined, 1, 10),
-      ]);
-      setSummary(summaryData);
-      setCountryStats(countries);
-      setCategoryStats(categories);
-      setCountryMapData(mapData);
-      setRecentContracts(contractsRes.data);
-
-      // Set available filter options from first load (unfiltered)
-      if (!currentFilters.country && !currentFilters.year) {
-        setAvailableCountries(summaryData.countryList || []);
-        setAvailableYears(summaryData.availableYears || []);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
-    loadData(filters);
-  }, [loadData, filters]);
-
-  // Fetch city data when a country is selected
-  useEffect(() => {
-    if (!selectedCountry) {
-      setCityData([]);
-      return;
-    }
-    async function loadCityData() {
+    async function loadData() {
       try {
-        setLoadingCities(true);
-        const cities = await fetchCityMapData(selectedCountry!);
-        setCityData(cities);
+        setLoading(true);
+        const [summaryData, countries, categories, mapData, contractsRes, allContractsRes] = await Promise.all([
+          fetchSummaryStats(),
+          fetchCountryStats(),
+          fetchCategoryStats(),
+          fetchCountryMapData(),
+          fetchContracts(undefined, 1, 10),
+          // Fetch more contracts for map display (up to 2000 for performance)
+          fetchContracts(undefined, 1, 2000),
+        ]);
+        setSummary(summaryData);
+        setCountryStats(countries);
+        setCategoryStats(categories);
+        setCountryMapData(mapData);
+        setRecentContracts(contractsRes.data);
+        // Convert all contracts to map features (filter for valid coordinates)
+        const features = allContractsRes.data
+          .filter(c => c.lat && c.lng && c.lat !== 0 && c.lng !== 0)
+          .map(contractToMapFeature);
+        setMapFeatures(features);
       } catch (err) {
-        console.error('Failed to load city data:', err);
-        setCityData([]);
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
       } finally {
-        setLoadingCities(false);
+        setLoading(false);
       }
     }
-    loadCityData();
-  }, [selectedCountry]);
-
-  const handleCountryClick = (code: string) => {
-    if (code === selectedCountry) {
-      // Clicking same country again deselects
-      setSelectedCountry(undefined);
-    } else {
-      setSelectedCountry(code);
-    }
-  };
-
-  const handleBackToEurope = () => {
-    setSelectedCountry(undefined);
-  };
-
-  const selectedCountryName = countryMapData.find(c => c.countryCode === selectedCountry)?.countryName;
+    loadData();
+  }, []);
 
   if (loading) return <LoadingSpinner message="Loading procurement data..." size="lg" />;
   if (error) return (
@@ -135,104 +107,18 @@ const Dashboard: React.FC = () => {
     fill: CHART_COLORS[i % CHART_COLORS.length],
   }));
 
-  const hasActiveFilters = filters.country || filters.year;
-
-  const clearFilters = () => {
-    setFilters({});
-  };
-
-  const handleFilterChange = (key: keyof DashboardFilters, value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value || undefined,
-    }));
-  };
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Data period and filters header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          {summary?.dateRange?.earliest && summary?.dateRange?.latest && (
-            <p className="text-xs text-gray-500">
-              Data period: {formatDate(summary.dateRange.earliest)} — {formatDate(summary.dateRange.latest)}
-            </p>
-          )}
+      {/* Data Timeline Banner */}
+      <div className="bg-gradient-to-r from-eu-blue to-eu-dark-blue rounded-lg px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-white font-medium">EU Public Procurement Data</span>
         </div>
-
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center gap-2 text-sm text-gray-600 hover:text-eu-blue transition-colors"
-        >
-          <Filter className="w-4 h-4" />
-          Advanced filters
-          {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          {hasActiveFilters && (
-            <span className="ml-1 px-1.5 py-0.5 text-xs bg-eu-blue text-white rounded-full">
-              {[filters.country, filters.year].filter(Boolean).length}
-            </span>
-          )}
-        </button>
+        <span className="text-eu-light-blue text-sm">
+          Contract awards from <span className="text-white font-semibold">January 2026</span>
+        </span>
       </div>
-
-      {/* Advanced Filters Panel */}
-      {showFilters && (
-        <div className="card bg-gray-50 border border-gray-200">
-          <div className="flex flex-wrap gap-4 items-end">
-            {/* Country filter */}
-            <div className="flex-1 min-w-[180px]">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Country</label>
-              <select
-                value={filters.country || ''}
-                onChange={(e) => handleFilterChange('country', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-eu-blue focus:border-eu-blue"
-              >
-                <option value="">All countries</option>
-                {availableCountries.map(code => (
-                  <option key={code} value={code}>
-                    {COUNTRY_NAMES[code] || code}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Year filter */}
-            <div className="flex-1 min-w-[120px]">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Year</label>
-              <select
-                value={filters.year || ''}
-                onChange={(e) => handleFilterChange('year', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-eu-blue focus:border-eu-blue"
-              >
-                <option value="">All years</option>
-                {availableYears.map(year => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Clear button */}
-            {hasActiveFilters && (
-              <button
-                onClick={clearFilters}
-                className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-red-600 transition-colors"
-              >
-                <X className="w-4 h-4" />
-                Clear
-              </button>
-            )}
-          </div>
-
-          {hasActiveFilters && (
-            <p className="mt-3 text-xs text-gray-500">
-              Showing statistics filtered by: {[
-                filters.country && (COUNTRY_NAMES[filters.country] || filters.country),
-                filters.year
-              ].filter(Boolean).join(', ')}
-            </p>
-          )}
-        </div>
-      )}
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -267,42 +153,14 @@ const Dashboard: React.FC = () => {
         {/* Map - takes 2/3 width on large screens */}
         <div className="lg:col-span-2">
           <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                {selectedCountry && (
-                  <button
-                    onClick={handleBackToEurope}
-                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-eu-blue transition-colors"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    Back
-                  </button>
-                )}
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {selectedCountry
-                    ? `Cities in ${selectedCountryName}`
-                    : 'Procurement Spending Across Europe'}
-                </h2>
-              </div>
-              {selectedCountry && (
-                <span className="text-xs text-gray-500">
-                  Click a city to see contracts
-                </span>
-              )}
-            </div>
-            {loadingCities ? (
-              <div className="h-[500px] flex items-center justify-center">
-                <LoadingSpinner message={`Loading cities in ${selectedCountryName}...`} />
-              </div>
-            ) : (
-              <EuropeMap
-                countryData={countryMapData}
-                cityData={selectedCountry ? cityData : undefined}
-                onCountryClick={handleCountryClick}
-                onCityClick={(cityName) => navigate(`/contracts?country=${selectedCountry}&search=${encodeURIComponent(cityName)}`)}
-                selectedCountry={selectedCountry}
-              />
-            )}
+            <h2 className="card-header">Procurement Spending Across Europe</h2>
+            <EuropeMap
+              countryData={countryMapData}
+              contracts={mapFeatures}
+              onCountryClick={(code) => setSelectedCountry(code === selectedCountry ? undefined : code)}
+              onContractClick={(contractId) => navigate(`/contracts/${contractId}`)}
+              selectedCountry={selectedCountry}
+            />
           </div>
         </div>
 
@@ -327,7 +185,7 @@ const Dashboard: React.FC = () => {
                   tick={{ fill: '#374151' }}
                 />
                 <Tooltip
-                  formatter={(value: number) => [formatCurrency(value), 'Total Spending']}
+                  formatter={(value: number) => [formatCompactCurrency(value), 'Total Spending']}
                   labelStyle={{ fontWeight: 600 }}
                   contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
                 />

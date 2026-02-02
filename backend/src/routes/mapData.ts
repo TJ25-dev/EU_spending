@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { mockContracts } from '../data/mockContracts.js';
+import prisma from '../lib/prisma.js';
 import { getCountryName, countryCoordinates } from '../data/countryCoordinates.js';
+import { Prisma } from '../generated/prisma/index.js';
 
 const router = Router();
 
@@ -23,85 +24,127 @@ interface GeoJSONFeatureCollection {
  * Return GeoJSON FeatureCollection with contract locations as points
  * Query params: country, minAmount, maxAmount, category
  */
-router.get('/', (req: Request<{}, {}, {}, {
-  country?: string;
-  minAmount?: string;
-  maxAmount?: string;
-  category?: string;
-}>, res: Response) => {
-  try {
-    let filtered = [...mockContracts];
-
-    // Apply filters
-    if (req.query.country) {
-      const countries = req.query.country.split(',').map(c => c.trim().toUpperCase());
-      filtered = filtered.filter(c =>
-        countries.includes(c.countryCode.toUpperCase())
-      );
-    }
-
-    if (req.query.minAmount) {
-      const minAmount = parseFloat(req.query.minAmount);
-      if (!isNaN(minAmount)) {
-        filtered = filtered.filter(c => c.amount >= minAmount);
+router.get(
+  '/',
+  async (
+    req: Request<
+      {},
+      {},
+      {},
+      {
+        country?: string;
+        minAmount?: string;
+        maxAmount?: string;
+        category?: string;
       }
-    }
+    >,
+    res: Response
+  ) => {
+    try {
+      const where: Prisma.ContractWhereInput = {};
 
-    if (req.query.maxAmount) {
-      const maxAmount = parseFloat(req.query.maxAmount);
-      if (!isNaN(maxAmount)) {
-        filtered = filtered.filter(c => c.amount <= maxAmount);
+      // Apply filters
+      if (req.query.country) {
+        const countries = req.query.country.split(',').map((c) => c.trim().toUpperCase());
+        where.countryCode = { in: countries };
       }
-    }
 
-    if (req.query.category) {
-      const category = req.query.category.toLowerCase();
-      filtered = filtered.filter(c =>
-        c.cpvDescription.toLowerCase().includes(category)
-      );
-    }
+      if (req.query.minAmount || req.query.maxAmount) {
+        const amountFilter: Prisma.FloatFilter = {};
+        if (req.query.minAmount) {
+          const minAmount = parseFloat(req.query.minAmount);
+          if (!isNaN(minAmount)) {
+            amountFilter.gte = minAmount;
+          }
+        }
+        if (req.query.maxAmount) {
+          const maxAmount = parseFloat(req.query.maxAmount);
+          if (!isNaN(maxAmount)) {
+            amountFilter.lte = maxAmount;
+          }
+        }
+        where.amount = amountFilter;
+      }
 
-    const featureCollection: GeoJSONFeatureCollection = {
-      type: 'FeatureCollection',
-      features: filtered.map(contract => ({
-        type: 'Feature' as const,
-        geometry: {
-          type: 'Point' as const,
-          coordinates: [contract.lng, contract.lat], // GeoJSON uses [lng, lat]
+      if (req.query.category) {
+        const category = req.query.category.toLowerCase();
+        where.cpvDescription = { contains: category, mode: 'insensitive' };
+      }
+
+      const contracts = await prisma.contract.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          amount: true,
+          currency: true,
+          country: true,
+          countryCode: true,
+          city: true,
+          region: true,
+          lat: true,
+          lng: true,
+          buyerName: true,
+          contractorName: true,
+          cpvCode: true,
+          cpvDescription: true,
+          publishDate: true,
+          procedureType: true,
+          tedNoticeId: true,
         },
-        properties: {
-          id: contract.id,
-          title: contract.title,
-          amount: contract.amount,
-          currency: contract.currency,
-          country: contract.country,
-          countryCode: contract.countryCode,
-          city: contract.city,
-          region: contract.region,
-          buyerName: contract.buyerName,
-          contractorName: contract.contractorName,
-          cpvCode: contract.cpvCode,
-          cpvDescription: contract.cpvDescription,
-          publishDate: contract.publishDate,
-          procedureType: contract.procedureType,
-          tedNoticeId: contract.tedNoticeId,
-        },
-      })),
-    };
+      });
 
-    res.json(featureCollection);
-  } catch (error) {
-    console.error('Error generating map data:', error);
-    res.status(500).json({ error: 'Internal server error' });
+      const featureCollection: GeoJSONFeatureCollection = {
+        type: 'FeatureCollection',
+        features: contracts
+          .filter((c) => c.lat !== null && c.lng !== null)
+          .map((contract) => ({
+            type: 'Feature' as const,
+            geometry: {
+              type: 'Point' as const,
+              coordinates: [contract.lng!, contract.lat!], // GeoJSON uses [lng, lat]
+            },
+            properties: {
+              id: contract.id,
+              title: contract.title,
+              amount: contract.amount,
+              currency: contract.currency,
+              country: contract.country,
+              countryCode: contract.countryCode,
+              city: contract.city,
+              region: contract.region,
+              buyerName: contract.buyerName,
+              contractorName: contract.contractorName,
+              cpvCode: contract.cpvCode,
+              cpvDescription: contract.cpvDescription,
+              publishDate: contract.publishDate.toISOString().split('T')[0],
+              procedureType: contract.procedureType,
+              tedNoticeId: contract.tedNoticeId,
+            },
+          })),
+      };
+
+      res.json(featureCollection);
+    } catch (error) {
+      console.error('Error generating map data:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
-});
+);
 
 /**
  * GET /api/map-data/countries
  * Return summary per country for choropleth map coloring
  */
-router.get('/countries', (_req: Request, res: Response) => {
+router.get('/countries', async (_req: Request, res: Response) => {
   try {
+    const contracts = await prisma.contract.findMany({
+      select: {
+        countryCode: true,
+        amount: true,
+      },
+    });
+
     const countryMap = new Map<
       string,
       {
@@ -114,13 +157,13 @@ router.get('/countries', (_req: Request, res: Response) => {
       }
     >();
 
-    for (const contract of mockContracts) {
+    for (const contract of contracts) {
       const existing = countryMap.get(contract.countryCode);
       if (existing) {
         existing.totalAmount += contract.amount;
         existing.contractCount += 1;
       } else {
-        const countryInfo = countryCoordinates.find(c => c.code === contract.countryCode);
+        const countryInfo = countryCoordinates.find((c) => c.code === contract.countryCode);
         countryMap.set(contract.countryCode, {
           countryCode: contract.countryCode,
           country: getCountryName(contract.countryCode),
@@ -133,7 +176,7 @@ router.get('/countries', (_req: Request, res: Response) => {
     }
 
     const countrySummary = Array.from(countryMap.values())
-      .map(entry => ({
+      .map((entry) => ({
         countryCode: entry.countryCode,
         country: entry.country,
         totalAmount: Math.round(entry.totalAmount * 100) / 100,
@@ -155,9 +198,26 @@ router.get('/countries', (_req: Request, res: Response) => {
  * GET /api/map-data/cities/:countryCode
  * Return summary per city for a specific country
  */
-router.get('/cities/:countryCode', (req: Request<{ countryCode: string }>, res: Response) => {
+router.get('/cities/:countryCode', async (req: Request<{ countryCode: string }>, res: Response) => {
   try {
     const countryCode = req.params.countryCode.toUpperCase();
+
+    const contracts = await prisma.contract.findMany({
+      where: { countryCode },
+      select: {
+        id: true,
+        title: true,
+        amount: true,
+        city: true,
+        region: true,
+        countryCode: true,
+        country: true,
+        lat: true,
+        lng: true,
+        buyerName: true,
+        contractorName: true,
+      },
+    });
 
     const cityMap = new Map<
       string,
@@ -175,16 +235,12 @@ router.get('/cities/:countryCode', (req: Request<{ countryCode: string }>, res: 
           title: string;
           amount: number;
           buyerName: string;
-          contractorName: string;
+          contractorName: string | null;
         }>;
       }
     >();
 
-    const countryContracts = mockContracts.filter(
-      c => c.countryCode.toUpperCase() === countryCode
-    );
-
-    for (const contract of countryContracts) {
+    for (const contract of contracts) {
       const cityKey = `${contract.city}-${contract.region}`;
       const existing = cityMap.get(cityKey);
 
@@ -202,21 +258,21 @@ router.get('/cities/:countryCode', (req: Request<{ countryCode: string }>, res: 
         existing.contracts.push(contractSummary);
       } else {
         cityMap.set(cityKey, {
-          city: contract.city,
-          region: contract.region,
+          city: contract.city || 'Unknown',
+          region: contract.region || 'Unknown',
           countryCode: contract.countryCode,
           country: contract.country,
           totalAmount: contract.amount,
           contractCount: 1,
-          lat: contract.lat,
-          lng: contract.lng,
+          lat: contract.lat || 0,
+          lng: contract.lng || 0,
           contracts: [contractSummary],
         });
       }
     }
 
     const citySummary = Array.from(cityMap.values())
-      .map(entry => ({
+      .map((entry) => ({
         city: entry.city,
         region: entry.region,
         countryCode: entry.countryCode,

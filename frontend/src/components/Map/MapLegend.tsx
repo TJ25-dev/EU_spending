@@ -36,7 +36,7 @@ const MapLegend: React.FC = () => {
       </div>
 
       {/* Color gradient legend */}
-      <div>
+      <div className="mb-3">
         <p className="text-xs text-gray-500 mb-2">Total Spending</p>
         <div
           className="h-3 rounded-full w-full"
@@ -48,6 +48,20 @@ const MapLegend: React.FC = () => {
           <span className="text-[10px] text-gray-400">Lower</span>
           <span className="text-[10px] text-gray-400">Higher</span>
         </div>
+      </div>
+
+      {/* Individual contracts indicator */}
+      <div className="pt-2 border-t border-gray-200">
+        <div className="flex items-center gap-2">
+          <div
+            className="rounded-full bg-red-500 opacity-80"
+            style={{ width: 10, height: 10 }}
+          />
+          <span className="text-[10px] text-gray-500">Individual contracts</span>
+        </div>
+        <p className="text-[10px] text-gray-400 mt-1 italic">
+          Zoom in to see individual contracts
+        </p>
       </div>
     </div>
   );

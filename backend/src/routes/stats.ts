@@ -1,74 +1,64 @@
 import { Router, Request, Response } from 'express';
-import { mockContracts, Contract } from '../data/mockContracts.js';
+import prisma from '../lib/prisma.js';
 import { getCountryName } from '../data/countryCoordinates.js';
 
 const router = Router();
 
-// Helper function to filter contracts based on query params
-function filterContracts(
-  contracts: Contract[],
-  filters: { country?: string; year?: string; category?: string }
-): Contract[] {
-  let filtered = contracts;
-
-  const countryFilter = filters.country;
-  if (countryFilter) {
-    filtered = filtered.filter(c => c.countryCode === countryFilter.toUpperCase());
-  }
-
-  const yearFilter = filters.year;
-  if (yearFilter) {
-    filtered = filtered.filter(c => c.publishDate.startsWith(yearFilter));
-  }
-
-  const categoryFilter = filters.category;
-  if (categoryFilter) {
-    filtered = filtered.filter(c =>
-      c.cpvCode.startsWith(categoryFilter) ||
-      c.cpvDescription.toLowerCase().includes(categoryFilter.toLowerCase())
-    );
-  }
-
-  return filtered;
-}
-
 /**
  * GET /api/stats/summary
  * Overall summary statistics
- * Query params: country, year, category
  */
-router.get('/summary', (req: Request<{}, {}, {}, { country?: string; year?: string; category?: string }>, res: Response) => {
+router.get('/summary', async (_req: Request, res: Response) => {
   try {
-    const contracts = filterContracts(mockContracts, req.query);
-    const totalContracts = contracts.length;
-    const totalSpending = contracts.reduce((sum, c) => sum + c.amount, 0);
-    const countries = new Set(contracts.map(c => c.countryCode));
-    const dates = contracts.map(c => c.publishDate).filter(Boolean).sort();
-    const averageAmount = totalContracts > 0 ? totalSpending / totalContracts : 0;
+    // Get aggregate stats
+    const [aggregates, countryCount, dateRange, contracts] = await Promise.all([
+      prisma.contract.aggregate({
+        _sum: { amount: true },
+        _avg: { amount: true },
+        _count: true,
+      }),
+      prisma.contract.groupBy({
+        by: ['countryCode'],
+      }),
+      prisma.contract.aggregate({
+        _min: { publishDate: true },
+        _max: { publishDate: true },
+      }),
+      prisma.contract.findMany({
+        select: {
+          amount: true,
+          procedureType: true,
+          publishDate: true,
+        },
+      }),
+    ]);
 
-    // Get available years from all contracts (for filter dropdown)
-    const allYears = [...new Set(mockContracts.map(c => c.publishDate?.substring(0, 4)).filter(Boolean))].sort();
+    const totalContracts = aggregates._count;
+    const totalSpending = aggregates._sum.amount || 0;
+    const averageAmount = aggregates._avg.amount || 0;
 
     // Amount distribution
     const amountRanges = {
-      under100k: contracts.filter(c => c.amount < 100000).length,
-      '100kTo500k': contracts.filter(c => c.amount >= 100000 && c.amount < 500000).length,
-      '500kTo1m': contracts.filter(c => c.amount >= 500000 && c.amount < 1000000).length,
-      '1mTo5m': contracts.filter(c => c.amount >= 1000000 && c.amount < 5000000).length,
-      '5mTo15m': contracts.filter(c => c.amount >= 5000000 && c.amount < 15000000).length,
-      over15m: contracts.filter(c => c.amount >= 15000000).length,
+      under100k: contracts.filter((c) => c.amount < 100000).length,
+      '100kTo500k': contracts.filter((c) => c.amount >= 100000 && c.amount < 500000).length,
+      '500kTo1m': contracts.filter((c) => c.amount >= 500000 && c.amount < 1000000).length,
+      '1mTo5m': contracts.filter((c) => c.amount >= 1000000 && c.amount < 5000000).length,
+      '5mTo15m': contracts.filter((c) => c.amount >= 5000000 && c.amount < 15000000).length,
+      over15m: contracts.filter((c) => c.amount >= 15000000).length,
     };
 
     // Procedure type breakdown
     const procedureTypes: Record<string, number> = {};
     for (const c of contracts) {
-      procedureTypes[c.procedureType] = (procedureTypes[c.procedureType] || 0) + 1;
+      if (c.procedureType) {
+        procedureTypes[c.procedureType] = (procedureTypes[c.procedureType] || 0) + 1;
+      }
     }
 
     // Monthly spending trend
     const monthlySpending: Record<string, { month: string; total: number; count: number }> = {};
     for (const c of contracts) {
-      const month = c.publishDate.substring(0, 7); // YYYY-MM
+      const month = c.publishDate.toISOString().substring(0, 7); // YYYY-MM
       if (!monthlySpending[month]) {
         monthlySpending[month] = { month, total: 0, count: 0 };
       }
@@ -84,12 +74,11 @@ router.get('/summary', (req: Request<{}, {}, {}, { country?: string; year?: stri
         totalContracts,
         totalSpending: Math.round(totalSpending * 100) / 100,
         averageAmount: Math.round(averageAmount * 100) / 100,
-        countriesCovered: countries.size,
-        countryList: Array.from(countries).sort(),
-        availableYears: allYears,
+        countriesCovered: countryCount.length,
+        countryList: countryCount.map((c) => c.countryCode).sort(),
         dateRange: {
-          from: dates[0] || '',
-          to: dates[dates.length - 1] || '',
+          from: dateRange._min.publishDate?.toISOString().split('T')[0],
+          to: dateRange._max.publishDate?.toISOString().split('T')[0],
         },
         amountDistribution: amountRanges,
         procedureTypes,
@@ -105,11 +94,17 @@ router.get('/summary', (req: Request<{}, {}, {}, { country?: string; year?: stri
 /**
  * GET /api/stats/by-country
  * Aggregated spending by country
- * Query params: year, category
  */
-router.get('/by-country', (req: Request<{}, {}, {}, { year?: string; category?: string }>, res: Response) => {
+router.get('/by-country', async (_req: Request, res: Response) => {
   try {
-    const contracts = filterContracts(mockContracts, req.query);
+    const contracts = await prisma.contract.findMany({
+      select: {
+        countryCode: true,
+        amount: true,
+        cpvDescription: true,
+      },
+    });
+
     const countryMap = new Map<
       string,
       {
@@ -130,7 +125,9 @@ router.get('/by-country', (req: Request<{}, {}, {}, { year?: string; category?: 
         existing.contractCount += 1;
         existing.minAmount = Math.min(existing.minAmount, contract.amount);
         existing.maxAmount = Math.max(existing.maxAmount, contract.amount);
-        existing.categories.add(contract.cpvDescription);
+        if (contract.cpvDescription) {
+          existing.categories.add(contract.cpvDescription);
+        }
       } else {
         countryMap.set(contract.countryCode, {
           countryCode: contract.countryCode,
@@ -139,13 +136,13 @@ router.get('/by-country', (req: Request<{}, {}, {}, { year?: string; category?: 
           contractCount: 1,
           minAmount: contract.amount,
           maxAmount: contract.amount,
-          categories: new Set([contract.cpvDescription]),
+          categories: new Set(contract.cpvDescription ? [contract.cpvDescription] : []),
         });
       }
     }
 
     const byCountry = Array.from(countryMap.values())
-      .map(entry => ({
+      .map((entry) => ({
         countryCode: entry.countryCode,
         country: entry.country,
         totalAmount: Math.round(entry.totalAmount * 100) / 100,
@@ -167,11 +164,18 @@ router.get('/by-country', (req: Request<{}, {}, {}, { year?: string; category?: 
 /**
  * GET /api/stats/by-category
  * Spending by CPV category
- * Query params: country, year
  */
-router.get('/by-category', (req: Request<{}, {}, {}, { country?: string; year?: string }>, res: Response) => {
+router.get('/by-category', async (_req: Request, res: Response) => {
   try {
-    const contracts = filterContracts(mockContracts, req.query);
+    const contracts = await prisma.contract.findMany({
+      select: {
+        cpvCode: true,
+        cpvDescription: true,
+        amount: true,
+        countryCode: true,
+      },
+    });
+
     const categoryMap = new Map<
       string,
       {
@@ -184,6 +188,8 @@ router.get('/by-category', (req: Request<{}, {}, {}, { country?: string; year?: 
     >();
 
     for (const contract of contracts) {
+      if (!contract.cpvCode) continue;
+
       // Group by top-level CPV category (first 2 digits)
       const topLevelCode = contract.cpvCode.substring(0, 2) + '000000';
       const existing = categoryMap.get(topLevelCode);
@@ -195,7 +201,7 @@ router.get('/by-category', (req: Request<{}, {}, {}, { country?: string; year?: 
       } else {
         categoryMap.set(topLevelCode, {
           cpvCode: topLevelCode,
-          cpvDescription: contract.cpvDescription,
+          cpvDescription: contract.cpvDescription || 'Other',
           totalAmount: contract.amount,
           contractCount: 1,
           countries: new Set([contract.countryCode]),
@@ -204,7 +210,7 @@ router.get('/by-category', (req: Request<{}, {}, {}, { country?: string; year?: 
     }
 
     const byCategory = Array.from(categoryMap.values())
-      .map(entry => ({
+      .map((entry) => ({
         cpvCode: entry.cpvCode,
         cpvDescription: entry.cpvDescription,
         totalAmount: Math.round(entry.totalAmount * 100) / 100,
@@ -225,9 +231,18 @@ router.get('/by-category', (req: Request<{}, {}, {}, { country?: string; year?: 
  * GET /api/stats/top-contractors
  * Top contractors by total contract value
  */
-router.get('/top-contractors', (req: Request<{}, {}, {}, { limit?: string }>, res: Response) => {
+router.get('/top-contractors', async (req: Request<{}, {}, {}, { limit?: string }>, res: Response) => {
   try {
     const topN = Math.min(50, Math.max(1, parseInt(req.query.limit || '20', 10)));
+
+    const contracts = await prisma.contract.findMany({
+      select: {
+        contractorName: true,
+        amount: true,
+        countryCode: true,
+        cpvDescription: true,
+      },
+    });
 
     const contractorMap = new Map<
       string,
@@ -240,26 +255,29 @@ router.get('/top-contractors', (req: Request<{}, {}, {}, { limit?: string }>, re
       }
     >();
 
-    for (const contract of mockContracts) {
-      const existing = contractorMap.get(contract.contractorName);
+    for (const contract of contracts) {
+      const name = contract.contractorName || 'Not disclosed';
+      const existing = contractorMap.get(name);
       if (existing) {
         existing.totalAmount += contract.amount;
         existing.contractCount += 1;
         existing.countries.add(contract.countryCode);
-        existing.categories.add(contract.cpvDescription);
+        if (contract.cpvDescription) {
+          existing.categories.add(contract.cpvDescription);
+        }
       } else {
-        contractorMap.set(contract.contractorName, {
-          contractorName: contract.contractorName,
+        contractorMap.set(name, {
+          contractorName: name,
           totalAmount: contract.amount,
           contractCount: 1,
           countries: new Set([contract.countryCode]),
-          categories: new Set([contract.cpvDescription]),
+          categories: new Set(contract.cpvDescription ? [contract.cpvDescription] : []),
         });
       }
     }
 
     const topContractors = Array.from(contractorMap.values())
-      .map(entry => ({
+      .map((entry) => ({
         contractorName: entry.contractorName,
         totalAmount: Math.round(entry.totalAmount * 100) / 100,
         contractCount: entry.contractCount,

@@ -1,9 +1,14 @@
 import axios from 'axios';
 import type { ApiError } from '../types';
 
+// API base URL - use environment variable in production, proxy in development
+const API_BASE_URL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
+
 // Create axios instance with default configuration
 const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

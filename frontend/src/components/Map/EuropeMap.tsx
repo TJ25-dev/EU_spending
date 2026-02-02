@@ -8,7 +8,6 @@ import {
   useMap,
 } from 'react-leaflet';
 import type { CountryMapData, MapFeature } from '../../types';
-import type { CityMapData } from '../../api/contracts';
 import MapLegend from './MapLegend';
 
 // Generate a unique key for each map instance to prevent "already initialized" error
@@ -16,10 +15,9 @@ let mapInstanceId = 0;
 
 interface EuropeMapProps {
   countryData: CountryMapData[];
-  cityData?: CityMapData[];
   contracts?: MapFeature[];
   onCountryClick?: (countryCode: string) => void;
-  onCityClick?: (cityName: string) => void;
+  onContractClick?: (contractId: string) => void;
   selectedCountry?: string;
 }
 
@@ -82,62 +80,77 @@ function countToRadius(
 }
 
 /**
- * Helper component that programmatically flies the map to a selected country or resets.
+ * Helper component that programmatically flies the map to a selected country.
  */
 function FlyToSelected({
   countryData,
-  cityData,
   selectedCountry,
 }: {
   countryData: CountryMapData[];
-  cityData?: CityMapData[];
   selectedCountry?: string;
 }) {
   const map = useMap();
 
   React.useEffect(() => {
-    if (selectedCountry && cityData && cityData.length > 0) {
-      // Zoom to fit all cities
-      const lats = cityData.map(c => c.lat);
-      const lngs = cityData.map(c => c.lng);
-      const bounds: [[number, number], [number, number]] = [
-        [Math.min(...lats) - 0.5, Math.min(...lngs) - 0.5],
-        [Math.max(...lats) + 0.5, Math.max(...lngs) + 0.5],
-      ];
-      map.flyToBounds(bounds, { duration: 1, padding: [50, 50] });
-    } else if (selectedCountry) {
-      const match = countryData.find(
-        (c) => c.countryCode === selectedCountry,
-      );
-      if (match?.center) {
-        map.flyTo(match.center, 6, { duration: 1 });
-      }
-    } else {
-      // Reset to Europe view
-      map.flyTo([50, 10], 4, { duration: 1 });
+    if (!selectedCountry) return;
+    const match = countryData.find(
+      (c) => c.countryCode === selectedCountry,
+    );
+    if (match?.center) {
+      map.flyTo(match.center, 6, { duration: 1 });
     }
-  }, [selectedCountry, countryData, cityData, map]);
+  }, [selectedCountry, countryData, map]);
 
   return null;
 }
 
+/**
+ * Helper component that tracks zoom level and reports it back
+ */
+function ZoomTracker({ onZoomChange }: { onZoomChange: (zoom: number) => void }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const handleZoom = () => {
+      onZoomChange(map.getZoom());
+    };
+
+    // Get initial zoom
+    handleZoom();
+
+    map.on('zoomend', handleZoom);
+    return () => {
+      map.off('zoomend', handleZoom);
+    };
+  }, [map, onZoomChange]);
+
+  return null;
+}
+
+// Zoom threshold for switching between aggregate and individual views
+const ZOOM_THRESHOLD = 6;
+
 const EuropeMap: React.FC<EuropeMapProps> = ({
   countryData,
-  cityData,
   contracts,
   onCountryClick,
-  onCityClick,
+  onContractClick,
   selectedCountry,
 }) => {
   // Use a unique key to prevent "Map container is already initialized" error
   const [mapKey] = useState(() => `map-${++mapInstanceId}`);
   const [isClient, setIsClient] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(4);
+
+  // Determine what to show based on zoom level
+  const showAggregates = zoomLevel < ZOOM_THRESHOLD;
+  const showIndividual = zoomLevel >= ZOOM_THRESHOLD && contracts && contracts.length > 0;
 
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Pre-compute ranges for sizing / colouring (countries)
+  // Pre-compute ranges for sizing / colouring
   const { minCount, maxCount, minAmount, maxAmount } = useMemo(() => {
     if (countryData.length === 0) {
       return { minCount: 0, maxCount: 1, minAmount: 0, maxAmount: 1 };
@@ -151,23 +164,6 @@ const EuropeMap: React.FC<EuropeMapProps> = ({
       maxAmount: Math.max(...amounts),
     };
   }, [countryData]);
-
-  // Pre-compute ranges for sizing / colouring (cities)
-  const cityRanges = useMemo(() => {
-    if (!cityData || cityData.length === 0) {
-      return { minCount: 0, maxCount: 1, minAmount: 0, maxAmount: 1 };
-    }
-    const counts = cityData.map((c) => c.contractCount);
-    const amounts = cityData.map((c) => c.totalAmount);
-    return {
-      minCount: Math.min(...counts),
-      maxCount: Math.max(...counts),
-      minAmount: Math.min(...amounts),
-      maxAmount: Math.max(...amounts),
-    };
-  }, [cityData]);
-
-  const showCityView = selectedCountry && cityData && cityData.length > 0;
 
   const COLOR_LOW = '#93c5fd';
   const COLOR_HIGH = '#1e3a5f';
@@ -198,68 +194,13 @@ const EuropeMap: React.FC<EuropeMapProps> = ({
 
         <FlyToSelected
           countryData={countryData}
-          cityData={cityData}
           selectedCountry={selectedCountry}
         />
 
-        {/* City markers (when drilled down) */}
-        {showCityView && cityData!.map((city) => {
-          const radius = countToRadius(
-            city.contractCount,
-            cityRanges.minCount,
-            cityRanges.maxCount,
-          );
-          const amountRatio =
-            cityRanges.maxAmount === cityRanges.minAmount
-              ? 0.5
-              : (city.totalAmount - cityRanges.minAmount) / (cityRanges.maxAmount - cityRanges.minAmount);
-          const fillColor = interpolateColor('#fcd34d', '#b45309', amountRatio);
+        <ZoomTracker onZoomChange={setZoomLevel} />
 
-          return (
-            <CircleMarker
-              key={`${city.city}-${city.region}`}
-              center={[city.lat, city.lng]}
-              radius={radius}
-              pathOptions={{
-                fillColor,
-                color: '#ffffff',
-                weight: 2,
-                opacity: 1,
-                fillOpacity: 0.8,
-              }}
-              eventHandlers={{
-                click: () => onCityClick?.(city.city),
-              }}
-            >
-              <Popup>
-                <div className="text-sm leading-relaxed">
-                  <p className="font-semibold text-gray-900 text-base mb-1">
-                    {city.city}
-                  </p>
-                  <p className="text-xs text-gray-500 mb-2">{city.region}</p>
-                  <p className="text-gray-600">
-                    Contracts:{' '}
-                    <span className="font-medium text-gray-900">
-                      {city.contractCount.toLocaleString()}
-                    </span>
-                  </p>
-                  <p className="text-gray-600">
-                    Total spending:{' '}
-                    <span className="font-medium text-gray-900">
-                      {formatCompactAmount(city.totalAmount)}
-                    </span>
-                  </p>
-                  <p className="text-xs text-eu-blue mt-2 cursor-pointer hover:underline">
-                    Click to view contracts
-                  </p>
-                </div>
-              </Popup>
-            </CircleMarker>
-          );
-        })}
-
-        {/* Country aggregate markers (when not drilled down) */}
-        {!showCityView && countryData.map((country) => {
+        {/* Country aggregate markers - shown at low zoom levels */}
+        {showAggregates && countryData.map((country) => {
           if (!country.center) return null;
 
           const radius = countToRadius(
@@ -313,24 +254,27 @@ const EuropeMap: React.FC<EuropeMapProps> = ({
           );
         })}
 
-        {/* Individual contract point markers */}
-        {contracts?.map((feature) => {
+        {/* Individual contract point markers - shown at high zoom levels */}
+        {showIndividual && contracts?.map((feature) => {
           const [lng, lat] = feature.geometry.coordinates;
           return (
             <CircleMarker
               key={feature.properties.id}
               center={[lat, lng]}
-              radius={4}
+              radius={6}
               pathOptions={{
                 fillColor: '#ef4444',
                 color: '#ffffff',
-                weight: 1,
+                weight: 1.5,
                 opacity: 0.9,
-                fillOpacity: 0.7,
+                fillOpacity: 0.8,
+              }}
+              eventHandlers={{
+                click: () => onContractClick?.(feature.properties.id),
               }}
             >
               <Popup>
-                <div className="text-sm leading-relaxed max-w-[220px]">
+                <div className="text-sm leading-relaxed max-w-[240px]">
                   <p className="font-semibold text-gray-900 mb-1">
                     {feature.properties.title}
                   </p>
@@ -354,6 +298,9 @@ const EuropeMap: React.FC<EuropeMapProps> = ({
                       </span>
                     </p>
                   )}
+                  <p className="text-xs text-eu-blue mt-2 cursor-pointer hover:underline">
+                    Click marker to view details
+                  </p>
                 </div>
               </Popup>
             </CircleMarker>

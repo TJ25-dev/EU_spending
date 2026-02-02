@@ -8,6 +8,26 @@ import { fetchContractById } from '../api/contracts';
 import { formatCurrency, formatDate } from '../utils/format';
 import type { Contract } from '../types';
 
+// Helper to construct TED URL - handles both full URLs and publication numbers
+const getTedUrl = (tedNoticeId: string): string => {
+  if (tedNoticeId.startsWith('http')) {
+    return tedNoticeId;
+  }
+  // Extract just the publication number (remove any "-LOT-XXX" suffix if present)
+  const pubNumber = tedNoticeId.replace(/-LOT-\d+$/, '').replace(/-AWARD-\d+$/, '');
+  return `https://ted.europa.eu/en/notice/-/detail/${pubNumber}`;
+};
+
+// Get display ID (for showing to user)
+const getDisplayId = (tedNoticeId: string): string => {
+  if (tedNoticeId.startsWith('http')) {
+    // Extract publication number from URL
+    const match = tedNoticeId.match(/\/detail\/([^/]+)$/);
+    return match ? match[1] : tedNoticeId;
+  }
+  return tedNoticeId;
+};
+
 const ContractDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -92,7 +112,11 @@ const ContractDetail: React.FC = () => {
         { label: 'CPV Code', value: contract.cpvCode || '-' },
         { label: 'CPV Description', value: contract.cpvDescription || '-' },
         { label: 'Notice Type', value: contract.noticeType || '-' },
-        { label: 'TED Notice ID', value: contract.tedNoticeId || '-' },
+        {
+          label: 'TED Notice ID',
+          value: contract.tedNoticeId ? getDisplayId(contract.tedNoticeId) : '-',
+          link: contract.tedNoticeId ? getTedUrl(contract.tedNoticeId) : undefined,
+        },
       ].filter(item => item.value !== '-'),
     },
   ];
@@ -117,7 +141,15 @@ const ContractDetail: React.FC = () => {
             <h1 className="text-2xl font-bold text-gray-900">{contract.title}</h1>
             {contract.tedNoticeId && (
               <p className="text-sm text-gray-500 mt-1">
-                TED Notice: {contract.tedNoticeId}
+                TED Notice:{' '}
+                <a
+                  href={getTedUrl(contract.tedNoticeId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-eu-blue hover:underline"
+                >
+                  {getDisplayId(contract.tedNoticeId)}
+                </a>
               </p>
             )}
           </div>
@@ -169,7 +201,20 @@ const ContractDetail: React.FC = () => {
                 {section.items.map((item) => (
                   <div key={item.label}>
                     <dt className="text-xs font-medium text-gray-500">{item.label}</dt>
-                    <dd className="text-sm text-gray-900 mt-0.5">{item.value}</dd>
+                    <dd className="text-sm text-gray-900 mt-0.5">
+                      {'link' in item && item.link ? (
+                        <a
+                          href={item.link as string}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-eu-blue hover:underline"
+                        >
+                          {item.value}
+                        </a>
+                      ) : (
+                        item.value
+                      )}
+                    </dd>
                   </div>
                 ))}
               </dl>
