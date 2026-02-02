@@ -4,3 +4,8 @@ dist/
 *.log
 .DS_Store
 scripts/output/
+
+# Large data files
+*.csv
+backend/src/data/*.json
+!backend/src/data/countryCoordinates.ts
