@@ -1,10 +1,11 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { BarChart3, FileText, Info, Trophy } from 'lucide-react';
+import { BarChart3, FileText, Info, Trophy, Building2 } from 'lucide-react';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: BarChart3 },
   { to: '/top-contracts', label: 'Top Contracts', icon: Trophy },
+  { to: '/top-contractors', label: 'Top Contractors', icon: Building2 },
   { to: '/contracts', label: 'Contracts', icon: FileText },
   { to: '/about', label: 'About', icon: Info },
 ];

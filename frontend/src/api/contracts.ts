@@ -7,6 +7,7 @@ import type {
   CountryStats,
   CategoryStats,
   TopContractor,
+  TopContractorsSummary,
   MapFeatureCollection,
   CountryMapData,
 } from '../types';
@@ -136,18 +137,19 @@ export async function fetchTopContracts(limit: number = 15): Promise<{ data: Con
 }
 
 /**
- * Fetch top contractors ranked by total contract value
+ * Fetch top contractors ranked by total contract value with summary stats
  */
-export async function fetchTopContractors(limit: number = 10): Promise<TopContractor[]> {
+export async function fetchTopContractors(limit: number = 30): Promise<{
+  data: TopContractor[];
+  summary: TopContractorsSummary;
+}> {
   const response = await apiClient.get('/stats/top-contractors', {
     params: { limit },
   });
-  return (response.data.data || []).map((d: Record<string, unknown>) => ({
-    contractorName: d.contractorName,
-    totalAmount: d.totalAmount,
-    contractCount: d.contractCount,
-    countries: d.countriesActive || [],
-  }));
+  return {
+    data: response.data.data || [],
+    summary: response.data.summary,
+  };
 }
 
 /**

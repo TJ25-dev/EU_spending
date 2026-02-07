@@ -107,10 +107,27 @@ export interface CountryMapData {
 
 // Top contractor entry
 export interface TopContractor {
+  rank: number;
   contractorName: string;
   totalAmount: number;
   contractCount: number;
-  countries: string[];
+  averageAmount: number;
+  marketShare: number;
+  topCountries: { code: string; name: string; count: number }[];
+  topCategories: string[];
+  countriesActive: number;
+}
+
+// Summary stats for top contractors
+export interface TopContractorsSummary {
+  overallTotalAmount: number;
+  overallContractCount: number;
+  top10TotalAmount: number;
+  top10Percentage: number;
+  top10ContractCount: number;
+  topNTotalAmount: number;
+  topNPercentage: number;
+  topNContractCount: number;
 }
 
 // Paginated API response

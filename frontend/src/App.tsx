@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import ContractsPage from './pages/ContractsPage';
 import ContractDetail from './pages/ContractDetail';
 import TopContractsPage from './pages/TopContractsPage';
+import TopContractorsPage from './pages/TopContractorsPage';
 import AboutPage from './pages/AboutPage';
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
           <Route path="/contracts" element={<ContractsPage />} />
           <Route path="/contracts/:id" element={<ContractDetail />} />
           <Route path="/top-contracts" element={<TopContractsPage />} />
+          <Route path="/top-contractors" element={<TopContractorsPage />} />
           <Route path="/about" element={<AboutPage />} />
         </Route>
       </Routes>

@@ -229,11 +229,11 @@ router.get('/by-category', async (_req: Request, res: Response) => {
 
 /**
  * GET /api/stats/top-contractors
- * Top contractors by total contract value
+ * Top contractors by total contract value with market share and summary stats
  */
 router.get('/top-contractors', async (req: Request<{}, {}, {}, { limit?: string }>, res: Response) => {
   try {
-    const topN = Math.min(50, Math.max(1, parseInt(req.query.limit || '20', 10)));
+    const topN = Math.min(100, Math.max(1, parseInt(req.query.limit || '30', 10)));
 
     const contracts = await prisma.contract.findMany({
       select: {
@@ -244,51 +244,105 @@ router.get('/top-contractors', async (req: Request<{}, {}, {}, { limit?: string 
       },
     });
 
+    // Track overall totals
+    let overallTotalAmount = 0;
+    let overallContractCount = 0;
+
+    // Track per-contractor data with country counts
     const contractorMap = new Map<
       string,
       {
         contractorName: string;
         totalAmount: number;
         contractCount: number;
-        countries: Set<string>;
+        countryCounts: Map<string, number>;
         categories: Set<string>;
       }
     >();
 
     for (const contract of contracts) {
+      overallTotalAmount += contract.amount;
+      overallContractCount += 1;
+
       const name = contract.contractorName || 'Not disclosed';
       const existing = contractorMap.get(name);
       if (existing) {
         existing.totalAmount += contract.amount;
         existing.contractCount += 1;
-        existing.countries.add(contract.countryCode);
+        existing.countryCounts.set(
+          contract.countryCode,
+          (existing.countryCounts.get(contract.countryCode) || 0) + 1
+        );
         if (contract.cpvDescription) {
           existing.categories.add(contract.cpvDescription);
         }
       } else {
+        const countryCounts = new Map<string, number>();
+        countryCounts.set(contract.countryCode, 1);
         contractorMap.set(name, {
           contractorName: name,
           totalAmount: contract.amount,
           contractCount: 1,
-          countries: new Set([contract.countryCode]),
+          countryCounts,
           categories: new Set(contract.cpvDescription ? [contract.cpvDescription] : []),
         });
       }
     }
 
-    const topContractors = Array.from(contractorMap.values())
-      .map((entry) => ({
+    // Sort and slice to get top contractors
+    const sortedContractors = Array.from(contractorMap.values())
+      .sort((a, b) => b.totalAmount - a.totalAmount)
+      .slice(0, topN);
+
+    // Calculate summary stats
+    const top10 = sortedContractors.slice(0, 10);
+    const top10TotalAmount = top10.reduce((sum, c) => sum + c.totalAmount, 0);
+    const top10ContractCount = top10.reduce((sum, c) => sum + c.contractCount, 0);
+
+    const topNTotalAmount = sortedContractors.reduce((sum, c) => sum + c.totalAmount, 0);
+    const topNContractCount = sortedContractors.reduce((sum, c) => sum + c.contractCount, 0);
+
+    // Format contractors with rank and market share
+    const topContractors = sortedContractors.map((entry, index) => {
+      // Get top 3 countries by contract count
+      const topCountries = Array.from(entry.countryCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([code, count]) => ({
+          code,
+          name: getCountryName(code),
+          count,
+        }));
+
+      // Get top 3 categories
+      const topCategories = Array.from(entry.categories).slice(0, 3);
+
+      return {
+        rank: index + 1,
         contractorName: entry.contractorName,
         totalAmount: Math.round(entry.totalAmount * 100) / 100,
         contractCount: entry.contractCount,
         averageAmount: Math.round((entry.totalAmount / entry.contractCount) * 100) / 100,
-        countriesActive: Array.from(entry.countries).sort(),
-        categoryCount: entry.categories.size,
-      }))
-      .sort((a, b) => b.totalAmount - a.totalAmount)
-      .slice(0, topN);
+        marketShare: Math.round((entry.totalAmount / overallTotalAmount) * 10000) / 100,
+        topCountries,
+        topCategories,
+        countriesActive: entry.countryCounts.size,
+      };
+    });
 
-    res.json({ data: topContractors });
+    res.json({
+      data: topContractors,
+      summary: {
+        overallTotalAmount: Math.round(overallTotalAmount * 100) / 100,
+        overallContractCount,
+        top10TotalAmount: Math.round(top10TotalAmount * 100) / 100,
+        top10Percentage: Math.round((top10TotalAmount / overallTotalAmount) * 10000) / 100,
+        top10ContractCount,
+        topNTotalAmount: Math.round(topNTotalAmount * 100) / 100,
+        topNPercentage: Math.round((topNTotalAmount / overallTotalAmount) * 10000) / 100,
+        topNContractCount,
+      },
+    });
   } catch (error) {
     console.error('Error computing contractor stats:', error);
     res.status(500).json({ error: 'Internal server error' });
