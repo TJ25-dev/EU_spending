@@ -123,6 +123,19 @@ export async function fetchCategoryStats(filters?: DashboardFilters): Promise<Ca
 }
 
 /**
+ * Fetch top contracts by amount (for Top Contracts showcase page)
+ */
+export async function fetchTopContracts(limit: number = 15): Promise<{ data: Contract[]; totalValue: number }> {
+  const response = await apiClient.get('/contracts/top', {
+    params: { limit },
+  });
+  return {
+    data: response.data.data || [],
+    totalValue: response.data.totalValue || 0,
+  };
+}
+
+/**
  * Fetch top contractors ranked by total contract value
  */
 export async function fetchTopContractors(limit: number = 10): Promise<TopContractor[]> {

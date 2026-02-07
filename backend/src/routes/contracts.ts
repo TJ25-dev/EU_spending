@@ -158,6 +158,35 @@ router.get('/', async (req: Request<{}, {}, {}, ContractQueryParams>, res: Respo
 });
 
 /**
+ * GET /api/contracts/top
+ * Get top contracts by amount (for Top Contracts showcase page)
+ */
+router.get('/top', async (req: Request<{}, {}, {}, { limit?: string }>, res: Response) => {
+  try {
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '15', 10)));
+
+    const topContracts = await prisma.contract.findMany({
+      orderBy: { amount: 'desc' },
+      take: limit,
+    });
+
+    const data = topContracts.map((c) => ({
+      ...c,
+      publishDate: c.publishDate.toISOString().split('T')[0],
+      deadline: c.deadline?.toISOString().split('T')[0] || null,
+    }));
+
+    // Calculate total value of top contracts
+    const totalValue = topContracts.reduce((sum, c) => sum + c.amount, 0);
+
+    res.json({ data, totalValue });
+  } catch (error) {
+    console.error('Error fetching top contracts:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
  * GET /api/contracts/:id
  * Get a single contract by ID
  */
