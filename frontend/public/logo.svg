@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="euroGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFE066"/>
+      <stop offset="50%" style="stop-color:#FFCC00"/>
+      <stop offset="100%" style="stop-color:#E6A800"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <text x="50" y="72"
+        font-family="Arial, sans-serif"
+        font-size="80"
+        font-weight="bold"
+        fill="url(#euroGold)"
+        text-anchor="middle"
+        filter="url(#glow)"
+        stroke="#CC9900"
+        stroke-width="1">€</text>
+</svg>

@@ -120,6 +120,22 @@ const Dashboard: React.FC = () => {
         </span>
       </div>
 
+      {/* Why This Matters Section */}
+      <section className="bg-slate-50 border border-slate-200 rounded-lg px-6 py-8 sm:py-10">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="text-2xl font-bold text-eu-dark-blue mb-4">
+            Why This Matters
+          </h2>
+          <p className="text-lg text-gray-700 leading-relaxed">
+            Every year, EU governments spend hundreds of billions of euros through public
+            procurement — buying everything from roads and bridges to IT systems and medical
+            supplies. This money comes from taxpayers, yet most people never see where it goes
+            or who wins these contracts. EU Procurement Tracker makes this spending transparent
+            and accessible to everyone.
+          </p>
+        </div>
+      </section>
+
       {/* Summary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
@@ -133,18 +149,21 @@ const Dashboard: React.FC = () => {
           value={formatCompactCurrency(summary?.totalAmount || 0)}
           subtitle="Public procurement value"
           icon={<TrendingUp className="w-6 h-6" />}
+          context={`≈ €${Math.round((summary?.totalAmount || 0) / 450_000_000)} per EU citizen`}
         />
         <StatCard
           title="Countries"
           value={String(summary?.totalCountries || 0)}
-          subtitle="EU member states represented"
+          subtitle="EU, EEA & associated states"
           icon={<Globe className="w-6 h-6" />}
+          tooltip={`Our database includes procurement data from:\n• 27 EU member states\n• 3 EEA countries (Norway, Iceland, Liechtenstein)\n• 2 associated states (Switzerland, United Kingdom)\n\nAll participate in the EU's public procurement system.`}
         />
         <StatCard
           title="Avg. Contract"
           value={formatCompactCurrency(summary?.averageAmount || 0)}
           subtitle="Average contract value"
           icon={<BarChart3 className="w-6 h-6" />}
+          context={`≈ ${Math.round((summary?.averageAmount || 0) / 50_000)} average annual salaries`}
         />
       </div>
 

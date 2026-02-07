@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="euroGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFE066"/>
+      <stop offset="50%" style="stop-color:#FFCC00"/>
+      <stop offset="100%" style="stop-color:#E6A800"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="6" fill="#4A7FC1"/>
+  <text x="16" y="24"
+        font-family="Arial, sans-serif"
+        font-size="24"
+        font-weight="bold"
+        fill="url(#euroGold)"
+        text-anchor="middle"
+        stroke="#CC9900"
+        stroke-width="0.5">€</text>
+</svg>

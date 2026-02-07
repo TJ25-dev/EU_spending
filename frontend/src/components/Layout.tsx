@@ -1,9 +1,10 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { BarChart3, FileText, Info } from 'lucide-react';
+import { BarChart3, FileText, Info, Trophy } from 'lucide-react';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: BarChart3 },
+  { to: '/top-contracts', label: 'Top Contracts', icon: Trophy },
   { to: '/contracts', label: 'Contracts', icon: FileText },
   { to: '/about', label: 'About', icon: Info },
 ];
@@ -19,9 +20,11 @@ const Layout: React.FC = () => {
           <div className="flex items-center justify-between h-16">
             {/* Logo and Title */}
             <NavLink to="/" className="flex items-center space-x-3 flex-shrink-0">
-              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-eu-gold text-eu-blue font-bold text-lg">
-                EU
-              </div>
+              <img
+                src="/logo.svg"
+                alt="EU Procurement Tracker"
+                className="w-10 h-10 drop-shadow-lg"
+              />
               <div className="hidden sm:block">
                 <h1 className="text-lg font-bold leading-tight">
                   EU Procurement Tracker
