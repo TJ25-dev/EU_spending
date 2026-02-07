@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Trophy, ArrowRight } from 'lucide-react';
 
 interface TopContract {
@@ -272,17 +271,15 @@ interface ContractCardProps {
 }
 
 const ContractCard: React.FC<ContractCardProps> = ({ contract, featured = false }) => {
-  const navigate = useNavigate();
   const tier = getValueTier(contract.value);
   const styles = tierStyles[tier];
   const flag = countryFlags[contract.countryCode] || '';
 
   return (
     <div
-      onClick={() => navigate(`/contracts/${contract.id}`)}
       className={`
         ${styles.bg} ${styles.border} border-2 rounded-xl overflow-hidden
-        cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1
+        transition-all duration-200 hover:shadow-lg
         ${featured ? 'p-6' : 'p-4'}
       `}
     >

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Globe, FileText, TrendingUp } from 'lucide-react';
+import { BarChart3, Globe, FileText, TrendingUp, ChevronDown } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -53,6 +53,7 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | undefined>();
+  const [showWhyMatters, setShowWhyMatters] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -120,21 +121,33 @@ const Dashboard: React.FC = () => {
         </span>
       </div>
 
-      {/* Why This Matters Section */}
-      <section className="bg-slate-50 border border-slate-200 rounded-lg px-6 py-8 sm:py-10">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-2xl font-bold text-eu-dark-blue mb-4">
-            Why This Matters
-          </h2>
-          <p className="text-lg text-gray-700 leading-relaxed">
-            Every year, EU governments spend hundreds of billions of euros through public
-            procurement — buying everything from roads and bridges to IT systems and medical
-            supplies. This money comes from taxpayers, yet most people never see where it goes
-            or who wins these contracts. EU Procurement Tracker makes this spending transparent
-            and accessible to everyone.
-          </p>
-        </div>
-      </section>
+      {/* Why This Matters Section - Collapsible */}
+      <div className="bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
+        <button
+          onClick={() => setShowWhyMatters(!showWhyMatters)}
+          className="w-full px-6 py-3 flex items-center justify-between text-left hover:bg-slate-100 transition-colors"
+        >
+          <span className="text-sm font-semibold text-eu-dark-blue">Why This Matters</span>
+          <ChevronDown
+            className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${
+              showWhyMatters ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+        {showWhyMatters && (
+          <div className="px-6 pb-6 pt-2">
+            <div className="max-w-3xl mx-auto text-center">
+              <p className="text-base text-gray-700 leading-relaxed">
+                Every year, EU governments spend hundreds of billions of euros through public
+                procurement — buying everything from roads and bridges to IT systems and medical
+                supplies. This money comes from taxpayers, yet most people never see where it goes
+                or who wins these contracts. EU Procurement Tracker makes this spending transparent
+                and accessible to everyone.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
